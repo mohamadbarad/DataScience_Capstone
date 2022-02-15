@@ -25,8 +25,9 @@ library(stringi)
 
 ```{r loading data}
 # Blog text file
+set.seed(3434)
 con <- file("final/en_US/en_US.blogs.txt")
-linesInFile.blog <- readLines(con, 300000)
+linesInFile.blog <- readLines(con, rbinom(800000,200000,0.5))
 fileSize.blog <- format(object.size(linesInFile.blog),units = "MB")
 fileNoOfLines.blog <- length(linesInFile.blog)
 fileWords.blog <- sum(stri_count_words(linesInFile.blog))
@@ -64,17 +65,19 @@ cor <- VCorpus(VectorSource(linesInFile.blog))
 # Function that  removes symbols
 symbolsRem <- content_transformer(function(x){
         x <- gsub("[`??????]","'",x)
-        x <- gsub("[^a-z']"," ",x)
-        x <- gsub("'{2,}"," '",x)
-        x <- gsub("' "," ",x)
-        x <- gsub(" '"," ",x)
+        # x <- gsub("[^a-z']"," ",x)
+        # x <- gsub("'{2,}"," '",x)
+        # x <- gsub("' "," ",x)
+        # x <- gsub(" '"," ",x)
         x <- gsub("^'","",x)
         x <- gsub("'$","",x)
-        x <- gsub("â|€|¦" ,"",x)
+        x <- gsub("â|€|¦|™" ,"",x)
         x <- gsub("[^ ]{1,}@[^ ]{1,}"," ",x)
         x <- gsub("@[^ ]{1,}"," ",x)
         x <- gsub("#[^ ]{1,}"," ",x)
         x <- gsub("[^ ]{1,}://[^ ]{1,}"," ",x)
+        x <- gsub("æ|ã|ï"," ",x)
+        x
 })
 # Function that turns punctuation to space
 # PunctToSpace <- content_transformer(function(x, pattern){
@@ -107,45 +110,104 @@ cor <- tm_map(cor, removeWords, stopwords("english"))
 # remove whitespace
 cor <- tm_map(cor, stripWhitespace)
 
-# converting to plain text doc
-cor <- tm_map(cor, PlainTextDocument)
-
-# Inspect docs
-writeLines(as.character(cor[[1000]]))
-
-```
-
-```{r, stemmming}
 library(SnowballC)
-
 # Stemming the docs
 cor <- tm_map(cor, stemDocument)
 
+# converting to plain text doc
+cor <- tm_map(cor, PlainTextDocument)
+
 # inspection
-writeLines(as.character(cor[[1000]]))
+writeLines(as.character(cor_stem[[500]]))
 # or
-cor[[1000]]$content
+cor[[500]]$content
 
 ```
 
-```{r document term matrix}
-dtm <- TermDocumentMatrix(cor)
 
-dtm_mat <- as.matrix(dtm)
+```{r Tokens}
+library(tidyverse)
+library(tidytext)
+
+dfCor <- tidy(cor_stem)
+
+dfCor %>% 
+  unnest_tokens(output = word, input = text ) %>% 
+  anti_join(stop_words) %>% 
+  count(word, sort = TRUE) %>% 
+  head(50)
+
+unigram <- dfCor %>% 
+  unnest_tokens(output = word, input = text) %>% 
+  count(word, sort = TRUE) %>% 
+  slice(1:20) %>% 
+  ggplot() + geom_bar(aes(word, n), stat = "identity", fill = "#de5833") +
+  theme_minimal() +
+  labs(title = "Top unigrams of Medium iOS App Reviews",
+       subtitle = "using Tidytext in R",
+       caption = "Data Source: itunesr - iTunes App Store")+
+  theme(axis.text.x = element_text(angle = 30, vjust = 0.5, hjust=1))
+unigram
+
+bigram <- dfCor %>% 
+  unnest_tokens(word, text, token = "ngrams", n = 2) %>% 
+  separate(word, c("word1", "word2"), sep = " ") %>% 
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>% 
+  unite(word,word1, word2, sep = " ",na.rm = TRUE) %>% 
+  count(word, sort = TRUE) %>% 
+  slice(1:20) %>% 
+  ggplot() + geom_bar(aes(word, n), stat = "identity", fill = "#de5833") +
+  theme_minimal() +
+  coord_flip() +
+  labs(title = "Top Bigrams of Medium iOS App Reviews",
+       subtitle = "using Tidytext in R",
+       caption = "Data Source: itunesr - iTunes App Store")
+bigram
+
+trigram <- dfCor %>% 
+  unnest_tokens(word, text, token = "ngrams", n = 3) %>% 
+  separate(word, c("word1", "word2","word3"), sep = " ") %>% 
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>% 
+  filter(!word3 %in% stop_words$word) %>% 
+  unite(word,word1, word2,word3, sep = " ", na.rm = TRUE) %>% 
+  count(word, sort = TRUE,) %>% 
+  slice(1:20) %>% 
+  ggplot() + geom_bar(aes(word, n), stat = "identity", fill = "#de5833") +
+  theme_minimal() +
+  coord_flip() +
+  labs(title = "Top Trigrams of Medium iOS App Reviews",
+       subtitle = "using Tidytext in R",
+       caption = "Data Source: itunesr - iTunes App Store")
+trigram
+```
+
+
+
+```{r document term matrix}
+dtm <- TermDocumentMatrix(cor_stem)
+
+library(tidytext)
+# dtm_mat <- as.matrix(dtm)
+dfCor <- tidy(dtm)
+colnames(dfCor) <- c("Word","Doc","Freq")
+
+dfCor_sort <- sort(rowSums(dfCor[,3]), decreasing = TRUE )
 
 dtm_mat.sort <- sort(rowSums(dtm_mat), decreasing =  TRUE)
 
-dfCor <- data.frame(word = names(dtm_mat.sort), freq = dtm_mat.sort)
+# dfCor <- data.frame(word = names(dtm_mat.sort), freq = dtm_mat.sort)
 
 library(wordcloud)
-wordcloud(word = dfCor$word, freq = dfCor$freq, min.freq = 1,max.words = 50, 
+wordcloud(word = dfCor$Word, freq = dfCor$Freq, min.freq = 1,max.words = 50, 
           random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
 
 ```
 
 ```{r N-grams building}
 # creating data frame for gram building
-GramData <- data.frame(text = sapply(cor, as.character), stringsAsFactors = FALSE)
+GramData <- data.frame(text = sapply(cor_stem, as.character), stringsAsFactors = FALSE)
 library(RWeka)
 
 # Creating Bi, uni and tri grams
