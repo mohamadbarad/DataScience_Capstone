@@ -1,0 +1,184 @@
+---
+title: "Exploratory analysis and Modelling"
+author: "Mohamad Barad"
+date: "13/2/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This report is about exploring the data in this capsone project, and getting closer into the statistics in the texts in order to be able to build the predition algorithm, in this data set the only the US datasets will be considered. 
+
+
+```{r packages}
+# Loading Packages 
+library(tm)
+library(stringi)
+
+```
+
+```{r loading data}
+# Blog text file
+con <- file("final/en_US/en_US.blogs.txt")
+linesInFile.blog <- readLines(con, 300000)
+fileSize.blog <- format(object.size(linesInFile.blog),units = "MB")
+fileNoOfLines.blog <- length(linesInFile.blog)
+fileWords.blog <- sum(stri_count_words(linesInFile.blog))
+close(con)
+cat("File size: ", fileSize.blog, " Lines in File: ", fileNoOfLines.blog, " Words in file: ", fileWords.blog)
+
+# # News text file
+# con <- file("final/en_US/en_US.news.txt.")
+# linesInFile.news <- readLines(con,1000)
+# fileSize.news <- format(object.size(linesInFile.news),units = "MB")
+# fileNoOfLines.news <- length(linesInFile.news)
+# fileWords.news <- sum(stri_count_words(linesInFile.news))
+# close(con)
+# cat("File size: ", fileSize.news, " Lines in File: ", fileNoOfLines.news, " Words in file: ", fileWords.news)
+# 
+# # Twitter text file
+# con <- file("final/en_US/en_US.twitter.txt", "r") 
+# linesInFile.twitter <- readLines(con,1000)
+# fileSize.twitter <- format(object.size(linesInFile.twitter),units = "Mb")
+# fileNoOfLines.twitter <- length(linesInFile.twitter)
+# fileWords.twitter <- sum(stri_count_words(linesInFile.twitter))
+# close(con) 
+# cat("File size: ", fileSize.twitter, " Lines in File: ", fileNoOfLines.twitter, " Words in file: ", fileWords.twitter)
+```
+
+```{r pre processing}
+# inpecting one of the documents
+head(linesInFile.blog)
+# head(linesInFile.news)
+# head(linesInFile.twitter)
+
+# Creatoing the corpus
+cor <- VCorpus(VectorSource(linesInFile.blog))
+
+# Function that  removes symbols
+symbolsRem <- content_transformer(function(x){
+        x <- gsub("[`??????]","'",x)
+        x <- gsub("[^a-z']"," ",x)
+        x <- gsub("'{2,}"," '",x)
+        x <- gsub("' "," ",x)
+        x <- gsub(" '"," ",x)
+        x <- gsub("^'","",x)
+        x <- gsub("'$","",x)
+        x <- gsub("â|€|¦" ,"",x)
+        x <- gsub("[^ ]{1,}@[^ ]{1,}"," ",x)
+        x <- gsub("@[^ ]{1,}"," ",x)
+        x <- gsub("#[^ ]{1,}"," ",x)
+        x <- gsub("[^ ]{1,}://[^ ]{1,}"," ",x)
+})
+# Function that turns punctuation to space
+# PunctToSpace <- content_transformer(function(x, pattern){
+#        return(gsub(pattern, " ", x))
+# })
+
+# Removing symbols
+cor <- tm_map(cor, symbolsRem)
+
+# Turning punctuation into space
+# cor <- tm_map(cor, PunctToSpace, "-")
+# cor <- tm_map(cor, PunctToSpace, ":")
+# cor <- tm_map(cor, PunctToSpace, "'")
+# cor <- tm_map(cor, PunctToSpace, "*")
+# cor <- tm_map(cor, PunctToSpace, " _")
+
+
+# Remove punctuation
+cor <- tm_map(cor, removePunctuation)
+
+# Transform to lower case 
+cor <- tm_map(cor, tolower)
+
+# Strip digits
+cor <- tm_map(cor, removeNumbers)
+
+# Remove stopwords
+cor <- tm_map(cor, removeWords, stopwords("english"))
+
+# remove whitespace
+cor <- tm_map(cor, stripWhitespace)
+
+# converting to plain text doc
+cor <- tm_map(cor, PlainTextDocument)
+
+# Inspect docs
+writeLines(as.character(cor[[1000]]))
+
+```
+
+```{r, stemmming}
+library(SnowballC)
+
+# Stemming the docs
+cor <- tm_map(cor, stemDocument)
+
+# inspection
+writeLines(as.character(cor[[1000]]))
+# or
+cor[[1000]]$content
+
+```
+
+```{r document term matrix}
+dtm <- TermDocumentMatrix(cor)
+
+dtm_mat <- as.matrix(dtm)
+
+dtm_mat.sort <- sort(rowSums(dtm_mat), decreasing =  TRUE)
+
+dfCor <- data.frame(word = names(dtm_mat.sort), freq = dtm_mat.sort)
+
+library(wordcloud)
+wordcloud(word = dfCor$word, freq = dfCor$freq, min.freq = 1,max.words = 50, 
+          random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+
+```
+
+```{r N-grams building}
+# creating data frame for gram building
+GramData <- data.frame(text = sapply(cor, as.character), stringsAsFactors = FALSE)
+library(RWeka)
+
+# Creating Bi, uni and tri grams
+UniTok <- NGramTokenizer(GramData,Weka_control(min =1, max =1))
+BiTok <- NGramTokenizer(GramData,Weka_control(min =2, max =2))
+TriTok <- NGramTokenizer(GramData,Weka_control(min =3, max =3))
+
+# Converting to dataframes 
+UniGram <- data.frame(table(UniTok))
+BiGram <- data.frame(table(BiTok))
+TriGram <- data.frame(table(TriTok))
+
+# Ordering the freq columns and renaming
+UniGram <- UniGram[order(UniGram$Freq, decreasing = TRUE),]
+colnames(UniGram) <- c("Word","Frequency")
+
+BiGram <- BiGram[order(BiGram$Freq, decreasing = TRUE),]
+colnames(BiGram) <- c("Word","Frequency")
+
+TriGram <- TriGram[order(TriGram$Freq, decreasing = TRUE),]
+colnames(TriGram) <- c("Word","Frequency")
+
+# Plotting the N-grams
+library(ggplot2)
+plotUnigram <- ggplot(UniGram[1:10,], aes(x = reorder(Word, Frequency),y=Frequency))+
+        geom_bar(stat = "Identity", fill = "red")+
+        geom_text(aes(y=Frequency, label = Frequency), vjust= 1) +  
+        coord_flip() +
+        labs(x = "Word", y = "Frequency", title = "Unigram Frequency")
+plotUnigram       
+
+
+
+```
+
+
