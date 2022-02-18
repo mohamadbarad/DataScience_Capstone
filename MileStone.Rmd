@@ -8,92 +8,101 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, cach)
 ```
 
-## R Markdown
+## Introduction
 
-This report is about exploring the data in this capsone project, and getting closer into the statistics in the texts in order to be able to build the predition algorithm, in this data set the only the US datasets will be considered. 
-
+This exercise is about working with our data and do some exploratory analysis of the data in order to prepare for building prediction models in the upcoming exercises and the shiny app development. First the data is loaded and then stored in a rds data set in order to clean up the environment and save some memory. Then data is then pre-processed and then visualised during the exploratory analysis. 
+Since the processes in this project takes much of the memory which decreases the efficiency of the code, only part of the data will be used. This is done by 'sampling' the data and only use part of it. 
+The buliding of N-gram models will be done in two different ways in order to gain some knowledge about the efficiency of the different methods and approaches. The first is using 'tidytext' package and the other is by using the  'Rweka' package. Comparison here will be on the efficiency and runtime during the two ways. 
 
 ```{r packages}
 # Loading Packages 
 library(tm)
 library(stringi)
+library(SnowballC)
+library(tidyverse)
+library(tidytext)
+library(wordcloud)
+library(RWeka)
 
+#Setting the seed
+set.seed(3434)
 ```
+
+# Data loading 
+Since on of the limitations of this exercise is memory, only part of the data will be used. This is done by reading the whole data from the three datasets 'blog', 'news' and 'Twitter', and then sampling 10 % of the data for analysis 
 
 ```{r loading data}
 # Blog text file
-set.seed(3434)
 con <- file("final/en_US/en_US.blogs.txt")
-linesInFile.blog <- readLines(con, rbinom(800000,200000,0.5))
+linesInFile.blog <- readLines(con,encoding="UTF-8",skipNul = TRUE)
 fileSize.blog <- format(object.size(linesInFile.blog),units = "MB")
 fileNoOfLines.blog <- length(linesInFile.blog)
 fileWords.blog <- sum(stri_count_words(linesInFile.blog))
 close(con)
-cat("File size: ", fileSize.blog, " Lines in File: ", fileNoOfLines.blog, " Words in file: ", fileWords.blog)
+info.blog <- paste0("File size: ", fileSize.blog, " Lines in File: ", fileNoOfLines.blog, " Words in file: ", fileWords.blog)
 
-# # News text file
-# con <- file("final/en_US/en_US.news.txt.")
-# linesInFile.news <- readLines(con,1000)
-# fileSize.news <- format(object.size(linesInFile.news),units = "MB")
-# fileNoOfLines.news <- length(linesInFile.news)
-# fileWords.news <- sum(stri_count_words(linesInFile.news))
-# close(con)
-# cat("File size: ", fileSize.news, " Lines in File: ", fileNoOfLines.news, " Words in file: ", fileWords.news)
-# 
-# # Twitter text file
-# con <- file("final/en_US/en_US.twitter.txt", "r") 
-# linesInFile.twitter <- readLines(con,1000)
-# fileSize.twitter <- format(object.size(linesInFile.twitter),units = "Mb")
-# fileNoOfLines.twitter <- length(linesInFile.twitter)
-# fileWords.twitter <- sum(stri_count_words(linesInFile.twitter))
-# close(con) 
-# cat("File size: ", fileSize.twitter, " Lines in File: ", fileNoOfLines.twitter, " Words in file: ", fileWords.twitter)
+# News text file
+con <- file("final/en_US/en_US.news.txt.")
+linesInFile.news <- readLines(con,encoding="UTF-8",skipNul = TRUE)
+fileSize.news <- format(object.size(linesInFile.news),units = "MB")
+fileNoOfLines.news <- length(linesInFile.news)
+fileWords.news <- sum(stri_count_words(linesInFile.news))
+close(con)
+info.news <- paste0("File size: ", fileSize.news, " Lines in File: ", fileNoOfLines.news, " Words in file: ", fileWords.news)
+
+# Twitter text file
+con <- file("final/en_US/en_US.twitter.txt", "r")
+linesInFile.twitter <- readLines(con,encoding="UTF-8",skipNul = TRUE)
+fileSize.twitter <- format(object.size(linesInFile.twitter),units = "Mb")
+fileNoOfLines.twitter <- length(linesInFile.twitter)
+fileWords.twitter <- sum(stri_count_words(linesInFile.twitter))
+close(con)
+info.twitter <- paste0("File size: ", fileSize.twitter, " Lines in File: ", fileNoOfLines.twitter, " Words in file: ", fileWords.twitter)
+
+# Summary of data files info
+info.blog
+info.news
+info.twitter
+
+# Sampling from data
+SampleData1 <- c(sample(linesInFile.blog,length(linesInFile.blog)*0.25),
+                sample(linesInFile.news,length(linesInFile.news)*0.25),
+                sample(linesInFile.twitter,length(linesInFile.twitter)*0.25)
+)
+SampleData2 <- c(sample(linesInFile.blog,length(linesInFile.blog)*0.01),
+                sample(linesInFile.news,length(linesInFile.news)*0.01),
+                sample(linesInFile.twitter,length(linesInFile.twitter)*0.01)
+)
+
+
+# Saving data samples in RDS
+saveRDS(SampleData1, "SampleUSData1.rds")
+saveRDS(SampleData2, "SampleUSData2.rds")
+
+# Cleaning the environment 
+rm(list=ls())
 ```
 
+# Preprocessing 
+After cleaning up the environ ment and the dataset samples is stored, the data is then loaded and prepared for the pre-processing which include:
+\item Punctuation removal
+\item Converting to lower case
+\item Removing numbers
+\item Removing stopwords
+\item Removing extra white spaces
+\item Word-stemming 
+\item Converting the document to plain text 
+
 ```{r pre processing}
-# inpecting one of the documents
-head(linesInFile.blog)
-# head(linesInFile.news)
-# head(linesInFile.twitter)
+# Reading data
+data <- readRDS("SampleUSData1.rds")
+
 
 # Creatoing the corpus
-cor <- VCorpus(VectorSource(linesInFile.blog))
-
-# Function that  removes symbols
-symbolsRem <- content_transformer(function(x){
-        x <- gsub("[`??????]","'",x)
-        # x <- gsub("[^a-z']"," ",x)
-        # x <- gsub("'{2,}"," '",x)
-        # x <- gsub("' "," ",x)
-        # x <- gsub(" '"," ",x)
-        x <- gsub("^'","",x)
-        x <- gsub("'$","",x)
-        x <- gsub("â|€|¦|™" ,"",x)
-        x <- gsub("[^ ]{1,}@[^ ]{1,}"," ",x)
-        x <- gsub("@[^ ]{1,}"," ",x)
-        x <- gsub("#[^ ]{1,}"," ",x)
-        x <- gsub("[^ ]{1,}://[^ ]{1,}"," ",x)
-        x <- gsub("æ|ã|ï"," ",x)
-        x
-})
-# Function that turns punctuation to space
-# PunctToSpace <- content_transformer(function(x, pattern){
-#        return(gsub(pattern, " ", x))
-# })
-
-# Removing symbols
-cor <- tm_map(cor, symbolsRem)
-
-# Turning punctuation into space
-# cor <- tm_map(cor, PunctToSpace, "-")
-# cor <- tm_map(cor, PunctToSpace, ":")
-# cor <- tm_map(cor, PunctToSpace, "'")
-# cor <- tm_map(cor, PunctToSpace, "*")
-# cor <- tm_map(cor, PunctToSpace, " _")
-
+cor <- VCorpus(VectorSource(data))
 
 # Remove punctuation
 cor <- tm_map(cor, removePunctuation)
@@ -110,105 +119,104 @@ cor <- tm_map(cor, removeWords, stopwords("english"))
 # remove whitespace
 cor <- tm_map(cor, stripWhitespace)
 
-library(SnowballC)
 # Stemming the docs
 cor <- tm_map(cor, stemDocument)
 
 # converting to plain text doc
 cor <- tm_map(cor, PlainTextDocument)
 
-# inspection
-writeLines(as.character(cor_stem[[500]]))
-# or
-cor[[500]]$content
-
 ```
 
+# N-gram models using tidytext package
+So after pre-processing the following exploratory analysis will be done by using tidytext package, to those that are used to working with ' %>% ' from the dplyr package. 
+Part of exploratory analysis is to look at the fancy wordcloud plot
 
-```{r Tokens}
-library(tidyverse)
-library(tidytext)
+```{r Exploratory Analysis}
+# Converting the corpus into a data frame. 
+dfCor <- tidy(cor) %>% 
+        select(text)
+rm(cor)
+# Creating  a data 
+dfCor1 <- dfCor %>% 
+        unnest_tokens(output = word, input = text, drop = TRUE, format = "text" ) %>% 
+        anti_join(stop_words) %>% 
+        count(word, sort = TRUE)
 
-dfCor <- tidy(cor_stem)
-
-dfCor %>% 
-  unnest_tokens(output = word, input = text ) %>% 
-  anti_join(stop_words) %>% 
-  count(word, sort = TRUE) %>% 
-  head(50)
-
-unigram <- dfCor %>% 
-  unnest_tokens(output = word, input = text) %>% 
-  count(word, sort = TRUE) %>% 
-  slice(1:20) %>% 
-  ggplot() + geom_bar(aes(word, n), stat = "identity", fill = "#de5833") +
-  theme_minimal() +
-  labs(title = "Top unigrams of Medium iOS App Reviews",
-       subtitle = "using Tidytext in R",
-       caption = "Data Source: itunesr - iTunes App Store")+
-  theme(axis.text.x = element_text(angle = 30, vjust = 0.5, hjust=1))
-unigram
-
-bigram <- dfCor %>% 
-  unnest_tokens(word, text, token = "ngrams", n = 2) %>% 
-  separate(word, c("word1", "word2"), sep = " ") %>% 
-  filter(!word1 %in% stop_words$word) %>%
-  filter(!word2 %in% stop_words$word) %>% 
-  unite(word,word1, word2, sep = " ",na.rm = TRUE) %>% 
-  count(word, sort = TRUE) %>% 
-  slice(1:20) %>% 
-  ggplot() + geom_bar(aes(word, n), stat = "identity", fill = "#de5833") +
-  theme_minimal() +
-  coord_flip() +
-  labs(title = "Top Bigrams of Medium iOS App Reviews",
-       subtitle = "using Tidytext in R",
-       caption = "Data Source: itunesr - iTunes App Store")
-bigram
-
-trigram <- dfCor %>% 
-  unnest_tokens(word, text, token = "ngrams", n = 3) %>% 
-  separate(word, c("word1", "word2","word3"), sep = " ") %>% 
-  filter(!word1 %in% stop_words$word) %>%
-  filter(!word2 %in% stop_words$word) %>% 
-  filter(!word3 %in% stop_words$word) %>% 
-  unite(word,word1, word2,word3, sep = " ", na.rm = TRUE) %>% 
-  count(word, sort = TRUE,) %>% 
-  slice(1:20) %>% 
-  ggplot() + geom_bar(aes(word, n), stat = "identity", fill = "#de5833") +
-  theme_minimal() +
-  coord_flip() +
-  labs(title = "Top Trigrams of Medium iOS App Reviews",
-       subtitle = "using Tidytext in R",
-       caption = "Data Source: itunesr - iTunes App Store")
-trigram
-```
-
-
-
-```{r document term matrix}
-dtm <- TermDocumentMatrix(cor_stem)
-
-library(tidytext)
-# dtm_mat <- as.matrix(dtm)
-dfCor <- tidy(dtm)
-colnames(dfCor) <- c("Word","Doc","Freq")
-
-dfCor_sort <- sort(rowSums(dfCor[,3]), decreasing = TRUE )
-
-dtm_mat.sort <- sort(rowSums(dtm_mat), decreasing =  TRUE)
-
-# dfCor <- data.frame(word = names(dtm_mat.sort), freq = dtm_mat.sort)
-
-library(wordcloud)
-wordcloud(word = dfCor$Word, freq = dfCor$Freq, min.freq = 1,max.words = 50, 
+# Taking a look on the workcloud 
+wordcloud(word = dfCor1$word, freq = dfCor1$n, min.freq = 1,max.words = 50, 
           random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
 
+# Uni-gram data preparation and looking at the top 20
+unigram <- dfCor %>%
+        unnest_tokens(output = word, input = text, drop = TRUE, format = "text") %>%
+        count(word, sort = TRUE) %>%
+        filter(word != "") %>% 
+        arrange(desc(n)) %>% 
+        slice(1:20)
+
+# Bigram data preparation and looking at the top 20
+bigram <- dfCor %>%
+        unnest_tokens(word, text, token = "ngrams", n = 2) %>%
+        separate(word, c("word1", "word2"), sep = " ") %>%
+        filter(!word1 %in% stop_words$word) %>%
+        filter(!word2 %in% stop_words$word) %>%
+        unite(word,word1, word2, sep = " ",na.rm = TRUE) %>%
+        count(word, sort = TRUE) %>%
+        filter(word != "") %>% 
+        arrange(desc(n)) %>% 
+        slice(1:20)
+
+# Trigram data preparation and looking at the top 20
+trigram <- dfCor %>%
+        unnest_tokens(word, text, token = "ngrams", n = 3,drop = T,format = "text",) %>%
+        separate(word, c("word1", "word2","word3"), sep = " ") %>%
+        filter(!word1 %in% stop_words$word) %>%
+        filter(!word2 %in% stop_words$word) %>%
+        filter(!word3 %in% stop_words$word) %>%
+        unite(word,word1, word2,word3, sep = " ", na.rm = TRUE) %>%
+        count(word, sort = TRUE) %>%
+        filter(word != "") %>% 
+        arrange(desc(n)) %>% 
+        slice(1:20)
 ```
 
+# Visualisation of N-grams 
+Th following plots shows the top 20 uni- bi-, tri- grams: 
+
+```{r plot grams}
+p1 <- ggplot(unigram) + 
+        geom_bar(aes(x= reorder(word, n),y=n), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 unigrams",
+             subtitle = "using Tidytext in R",
+             caption = "Data Source:")
+p1
+        
+p2 <- ggplot(bigram) + 
+        geom_bar(aes(x= reorder(word, n),y=n), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 Bigrams",
+             subtitle =  "Using Tidytext in R",
+             caption = "Data Source: ")
+p2
+
+p3 <- ggplot(trigram) + 
+        geom_bar(aes(x= reorder(word, n),y=n), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 Trigrams",
+             subtitle = "using Tidytext in R",
+             caption = "Data Source:")
+p3
+```
+
+# N-gram models using Rweka package
+The following exploratory analysis is done by using the RWeka package in R. 
+
 ```{r N-grams building}
-# creating data frame for gram building
-GramData <- data.frame(text = sapply(cor_stem, as.character), stringsAsFactors = FALSE)
-library(RWeka)
+GramData <- dfCor
 
 # Creating Bi, uni and tri grams
 UniTok <- NGramTokenizer(GramData,Weka_control(min =1, max =1))
@@ -243,4 +251,11 @@ plotUnigram
 
 ```
 
+```{r exploratory analysis}
 
+```
+
+# Further analysis    
+The next step i to build predictive models using n-gram backoff models. Here is the goal to build both accurate and efficient models. 
+
+The shiny app development is aimed to be intuitive and easy to go with few steps and clear output to the user.
