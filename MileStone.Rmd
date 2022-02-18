@@ -72,15 +72,9 @@ SampleData1 <- c(sample(linesInFile.blog,length(linesInFile.blog)*0.25),
                 sample(linesInFile.news,length(linesInFile.news)*0.25),
                 sample(linesInFile.twitter,length(linesInFile.twitter)*0.25)
 )
-SampleData2 <- c(sample(linesInFile.blog,length(linesInFile.blog)*0.01),
-                sample(linesInFile.news,length(linesInFile.news)*0.01),
-                sample(linesInFile.twitter,length(linesInFile.twitter)*0.01)
-)
-
 
 # Saving data samples in RDS
 saveRDS(SampleData1, "SampleUSData1.rds")
-saveRDS(SampleData2, "SampleUSData2.rds")
 
 # Cleaning the environment 
 rm(list=ls())
@@ -99,7 +93,6 @@ After cleaning up the environ ment and the dataset samples is stored, the data i
 ```{r pre processing}
 # Reading data
 data <- readRDS("SampleUSData1.rds")
-
 
 # Creatoing the corpus
 cor <- VCorpus(VectorSource(data))
