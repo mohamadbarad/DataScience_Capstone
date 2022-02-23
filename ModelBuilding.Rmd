@@ -66,8 +66,8 @@ info.twitter <- paste0("File size: ", fileSize.twitter, " Lines in File: ", file
 
 # Sampling from data
 SampleData <- sapply(list(sample(linesInFile.blog,length(linesInFile.blog)*0.001),
-                          sample(linesInFile.news,length(linesInFile.news)*0.001),
-                          sample(linesInFile.twitter,length(linesInFile.twitter)*0.001)),
+                          sample(linesInFile.news,length(linesInFile.news)*0.25),
+                          sample(linesInFile.twitter,length(linesInFile.twitter)*0.25)),
                      rbind)
 
 
@@ -78,12 +78,12 @@ DataSummary <- data.frame(Document = c("blog","news","twitter"),
           NumberOfLines = c(fileNoOfLines.blog,fileNoOfLines.news,fileNoOfLines.twitter),
           NumberOfWords = c(fileWords.blog,fileWords.news,fileWords.twitter),
           Sampled0.1 = c(length(linesInFile.blog)*0.001,
-                                     length(linesInFile.news)*0.001,
-                                     length(linesInFile.twitter)*0.001)  )
+                                     length(linesInFile.news),
+                                     length(linesInFile.twitter))  )
 DataSummary
 
 # Saving data samples in RDS
-saveRDS(SampleData, "SampleDataTinyList.rds")
+saveRDS(SampleData, "SampleDataTinyListBig.rds")
 
 # Cleaning the environment 
 rm(list=ls())
@@ -101,7 +101,7 @@ After cleaning up the environ ment and the dataset samples is stored, the data i
 
 ```{r pre processing, eval}
 # Reading data
-data <- readRDS("SampleDataTinyList.rds")
+data <- readRDS("SampleDataTinyListBig.rds")
 
 # Creatoing the corpus
 cor <- VCorpus(VectorSource(data),readerControl = list(language = "en_US"))
@@ -229,12 +229,11 @@ The shiny app development is aimed to be intuitive and easy to go with few steps
 # Predictive model development 
 
 ```{r N-Gram Modelling}
+options(java.parameters = "-Xmx1024m")
 
 OnegramToken <- function(x){NGramTokenizer(x, Weka_control(min=1, max=1))}
 BigramToken <- function(x){NGramTokenizer(x, Weka_control(min=2, max=2))}
 TrigramToken <- function(x){NGramTokenizer(x, Weka_control(min=3, max=3))}
-
-
 
 # Function for converting document matrix into a data frame
 dtmToDf <- function(DocTermMatrix){
@@ -354,7 +353,16 @@ source("SeparateTerms.R")
 source("getLastTerms.R")
 source("getTriGramProb.R")
 
-getTriGramProb("buy a case")
+probFinal <- getTriGramProb("faith during the")
+
+suggest3Gram <- TriGramTable_leftOverProb[which(TriGramTable_leftOverProb$leftoverprob>=probFinal),]
+suggest3Gram[1:20,]
+
+suggest2Gram <- BiGramTable_leftOverProb[which(BiGramTable_leftOverProb$leftoverprob>=probFinal),]
+suggest2Gram[1:20,]
+
+suggest1Gram <- UniGramTable[which(UniGramTable$discount>=probFinal),]
+suggest1Gram[1:20,]
 ```
 
 ```{r Next word}
@@ -364,7 +372,8 @@ TriGramTable <- TriGramTable %>%
   separate(FirstTerms, c("word1","word2"),sep = " ")
 colnames(TriGramTable)[3] <- "word3"
 
-
+source("PredictionFunctions.R")
+predictNextWord("be insensitive")
 ```
 
 
