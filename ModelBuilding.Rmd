@@ -19,15 +19,18 @@ The buliding of N-gram models will be done using 'tidytext' package, which is co
 
 ```{r packages}
 # Loading Packages 
-library(tm)
+# library(tm)
 library(stringi)
 library(SnowballC)
-library(tidyverse)
-library(tidytext)
+library(dplyr)
+# library(tidytext)
 library(wordcloud)
-library(RWeka)
+# library(RWeka)
 library(ggplot2)
+library(quanteda)
 library(data.table)
+
+# library(readr)
 
 #Setting the seed
 set.seed(3434)
@@ -38,7 +41,7 @@ Since on of the limitations of this exercise is memory, only part of the data wi
 
 ```{r loading data}
 # Blog text file
-con <- file("00ProjectData/Training/final/en_US/en_US.blogs.txt")
+con <- file("00ProjectData/Training/final/en_US/en_US.blogs.txt",open = "rb",encoding = "ACSII")
 linesInFile.blog <- readLines(con,encoding="UTF-8",skipNul = TRUE)
 fileSize.blog <- format(object.size(linesInFile.blog),units = "MB")
 fileNoOfLines.blog <- length(linesInFile.blog)
@@ -47,7 +50,7 @@ close(con)
 info.blog <- paste0("File size: ", fileSize.blog, " Lines in File: ", fileNoOfLines.blog, " Words in file: ", fileWords.blog)
 
 # News text file
-con <- file("00ProjectData/Training/final/en_US/en_US.news.txt.")
+con <- file("00ProjectData/Training/final/en_US/en_US.news.txt.",open = "rb",encoding = "ACSII")
 linesInFile.news <- readLines(con,encoding="UTF-8",skipNul = TRUE)
 fileSize.news <- format(object.size(linesInFile.news),units = "MB")
 fileNoOfLines.news <- length(linesInFile.news)
@@ -55,8 +58,9 @@ fileWords.news <- sum(stri_count_words(linesInFile.news))
 close(con)
 info.news <- paste0("File size: ", fileSize.news, " Lines in File: ", fileNoOfLines.news, " Words in file: ", fileWords.news)
 
+
 # Twitter text file
-con <- file("00ProjectData/Training/final/en_US/en_US.twitter.txt", "r")
+con <- file("00ProjectData/Training/final/en_US/en_US.twitter.txt", open = "rb",encoding = "ACSII")
 linesInFile.twitter <- readLines(con,encoding="UTF-8",skipNul = TRUE)
 fileSize.twitter <- format(object.size(linesInFile.twitter),units = "Mb")
 fileNoOfLines.twitter <- length(linesInFile.twitter)
@@ -64,29 +68,28 @@ fileWords.twitter <- sum(stri_count_words(linesInFile.twitter))
 close(con)
 info.twitter <- paste0("File size: ", fileSize.twitter, " Lines in File: ", fileNoOfLines.twitter, " Words in file: ", fileWords.twitter)
 
+
 # Sampling from data
-SampleData <- sapply(list(sample(linesInFile.blog,length(linesInFile.blog)*0.001),
-                          sample(linesInFile.news,length(linesInFile.news)*0.25),
-                          sample(linesInFile.twitter,length(linesInFile.twitter)*0.25)),
-                     rbind)
+datalist <- list(blogData = linesInFile.blog,
+                 newsData = linesInFile.news,
+                 twitterData = linesInFile.twitter)
 
 
 
 # Summary of data
 DataSummary <- data.frame(Document = c("blog","news","twitter"), 
-          size = c(fileSize.blog,fileSize.news,fileSize.twitter),
-          NumberOfLines = c(fileNoOfLines.blog,fileNoOfLines.news,fileNoOfLines.twitter),
-          NumberOfWords = c(fileWords.blog,fileWords.news,fileWords.twitter),
-          Sampled0.1 = c(length(linesInFile.blog)*0.001,
-                                     length(linesInFile.news),
-                                     length(linesInFile.twitter))  )
+                          size = c(fileSize.blog,fileSize.news,fileSize.twitter),
+                          NumberOfLines = c(fileNoOfLines.blog,fileNoOfLines.news,fileNoOfLines.twitter),
+                          NumberOfWords = c(fileWords.blog,fileWords.news,fileWords.twitter)
+)
 DataSummary
 
 # Saving data samples in RDS
-saveRDS(SampleData, "SampleDataTinyListBig.rds")
+saveRDS(datalist, "datalist.rds")
 
 # Cleaning the environment 
 rm(list=ls())
+gc()
 ```
 
 # Preprocessing 
@@ -101,36 +104,158 @@ After cleaning up the environ ment and the dataset samples is stored, the data i
 
 ```{r pre processing, eval}
 # Reading data
-data <- readRDS("SampleDataTinyListBig.rds")
+datalist <- readRDS("datalist.rds")
 
-# Creatoing the corpus
-cor <- VCorpus(VectorSource(data),readerControl = list(language = "en_US"))
+# Clean and Tokenize into sentences
+system.time(TokSent <- lapply(datalist,function(x){
+        tmp <- quanteda::corpus(x)
+        corpus_reshape(tmp,to = "sentences")
+})) 
 
-# PunctToSpace <- content_transformer(function(x) gsub("[^[:alnum:][:space:]'`]", "", x))
+system.time(unigram <- lapply(TokSent, function(x){
+        t<- tokens(x,
+                   what = "word",
+                   remove_punct = TRUE,
+                   remove_symbols = TRUE,
+                   remove_numbers = TRUE,
+                   remove_separators = TRUE,
+                   split_hyphens = TRUE,
+                   padding = TRUE,
+                   verbose = TRUE)
+        tokens_select(t,pattern=stopwords("en"), selection = "remove")
+}))
+rm(TokSent)
 
-# Remove punctuation
-# cor <- tm_map(cor, PunctToSpace)
+system.time(bigram <- lapply(unigram, function(x){
+        tokens_ngrams(x,n = 2)
+}))
 
-# Transform to lower case 
-cor <- tm_map(cor, tolower)
+system.time(trigram <- lapply(unigram, function(x){
+        tokens_ngrams(x,n = 3)
+}))
 
-# Remove puntcuation
-cor<-tm_map(cor, removePunctuation, preserve_intra_word_dashes=TRUE);
 
-# Strip digits
-cor <- tm_map(cor, removeNumbers)
+### UNIGRAM GENERATION AND VISUALISATION ### START 
+unigram <- readRDS("unigram.rds")
+system.time(
+        for (i in 1:3) {
+                UniDocFeat <- dfm(unigram[[i]])     
+        }
+)
+dtmToDf <- function(DocTermMatrix){
+        freq <- colSums(DocTermMatrix)
+        terms <- data.frame(term = names(freq), frequency = freq, stringsAsFactors = FALSE)
+        terms <- arrange(terms, desc(frequency))
+        rownames(terms) <- 1:length(freq)
+        terms <- terms[!(is.na(terms$term) | terms$term==""), ]
+        return(terms)
+}
+UniDataFrame <- dtmToDf(UniDocFeat)
 
-# Remove stopwords
-cor <- tm_map(cor, removeWords, stopwords("english"))
+# Word cloud
+wordcloud(word = UniDataFrame$term, freq = UniDataFrame$frequency, min.freq = 1,max.words = 50, 
+          random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
 
-# remove whitespace
-cor <- tm_map(cor, stripWhitespace)
+# Bar plot:
+p1 <- ggplot( UniDataFrame[1:20,]) + 
+        geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 unigrams",
+             subtitle = "using Tidytext in R",
+             caption = "Data Source:")
+p1
+saveRDS(UniDocFeat,"UniDocFeat.rds")
+saveRDS(UniDataFrame,"UniDataFrame.rds")
+rm(list=ls())
+gc()
+### UNIGRAM GENERATION AND VISUALISATION ### END
 
-# Stemming the docs
-cor <- tm_map(cor, stemDocument,language = "english")
 
-# converting to plain text doc
-cor <- tm_map(cor, PlainTextDocument)
+### BIGRAM GENERATION AND VISUALISATION ### START 
+bigram <- readRDS("bigram.rds")
+system.time(
+        for (i in 1:3) {
+                BiDocFeat <- dfm(bigram[[i]])     
+        }
+)
+dtmToDf <- function(DocTermMatrix){
+        freq <- colSums(DocTermMatrix)
+        terms <- data.frame(term = names(freq), frequency = freq, stringsAsFactors = FALSE)
+        terms <- arrange(terms, desc(frequency))
+        rownames(terms) <- 1:length(freq)
+        terms <- terms[!(is.na(terms$term) | terms$term==""), ]
+        return(terms)
+}
+
+BiDataFrame <- dtmToDf(BiDocFeat)
+
+# Word cloud
+wordcloud(word = BiDataFrame$term, freq = BiDataFrame$frequency, min.freq = 1,max.words = 50,random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+
+# Bar plot:
+p1 <- ggplot( BiDataFrame[1:20,]) + 
+        geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 unigrams",
+             subtitle = "using Tidytext in R",
+             caption = "Data Source:")
+p1
+saveRDS(BiDocFeat,"BiDocFeat.rds")
+saveRDS(BiDataFrame,"BiDataFrame.rds")
+rm(list=ls())
+gc()
+### BIGRAM GENERATION AND VISUALISATION ### END
+
+
+### TRIGRAM GENERATION AND VISUALISATION ### START 
+trigram <- readRDS("trigram.rds")
+system.time(
+        for (i in 1:3) {
+                TriDocFeat <- dfm(trigram[[i]])     
+        }
+)
+dtmToDf <- function(DocTermMatrix){
+        freq <- colSums(DocTermMatrix)
+        terms <- data.frame(term = names(freq), frequency = freq, stringsAsFactors = FALSE)
+        terms <- arrange(terms, desc(frequency))
+        rownames(terms) <- 1:length(freq)
+        terms <- terms[!(is.na(terms$term) | terms$term==""), ]
+        return(terms)
+}
+
+TriDataFrame <- dtmToDf(TriDocFeat)
+
+# Word cloud
+wordcloud(word = TriDataFrame$term, freq = TriDataFrame$frequency, min.freq = 1,max.words = 50,random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+
+# Bar plot:
+p1 <- ggplot( TriDataFrame[1:20,]) + 
+        geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 unigrams",
+             subtitle = "using Tidytext in R",
+             caption = "Data Source:")
+p1
+saveRDS(TriDocFeat,"TriDocFeat.rds")
+saveRDS(TriDataFrame,"TriDataFrame.rds")
+rm(list=ls())
+gc()
+### TRIGRAM GENERATION AND VISUALISATION ### END
+
+
+
+# system.time(tetragram <- lapply(unigram, function(x){
+#   tokens_ngrams(x,n = 4)
+# }))
+# system.time(pentagram <- lapply(unigram, function(x){
+#   tokens_ngrams(x,n = 5)
+# }))
+# system.time(hexagram <- lapply(unigram, function(x){
+#   tokens_ngrams(x,n = 6)
+#
 
 ```
 
@@ -200,7 +325,7 @@ p1 <- ggplot(unigram[1:20,]) +
              subtitle = "using Tidytext in R",
              caption = "Data Source:")
 p1
-        
+
 p2 <- ggplot(bigram[1:20,]) + 
         geom_bar(aes(x= reorder(word, n),y=n), stat = "identity", fill = "#de5833") +
         theme_minimal() +
@@ -237,11 +362,11 @@ TrigramToken <- function(x){NGramTokenizer(x, Weka_control(min=3, max=3))}
 
 # Function for converting document matrix into a data frame
 dtmToDf <- function(DocTermMatrix){
-  freq <- colSums(DocTermMatrix)
-  terms <- data.frame(term = names(freq), frequency = freq, stringsAsFactors = FALSE)
-  terms <- arrange(terms, desc(frequency))
-  rownames(terms) <- 1:length(freq)
-  return(terms)
+        freq <- colSums(DocTermMatrix)
+        terms <- data.frame(term = names(freq), frequency = freq, stringsAsFactors = FALSE)
+        terms <- arrange(terms, desc(frequency))
+        rownames(terms) <- 1:length(freq)
+        return(terms)
 }
 
 # Creating DocumentTermMatrix One-Gram
@@ -322,12 +447,12 @@ colnames(OneGramDF)[1] <- "LastTerm"
 UniGramTable <- data.table(OneGramDF)
 
 BiGramDF1 <- BiGramDF %>%
-  separate(term, c("FirstTerms","LastTerm"),sep = " ") 
+        separate(term, c("FirstTerms","LastTerm"),sep = " ") 
 BiGramTable <- data.table(BiGramDF1)
 
 TriGramDF1 <- TriGramDF %>% 
-  separate(term, c("FirstTerms","MidTerm","LastTerm"),sep = " ") %>% 
-  unite("FirstTerms",FirstTerms,MidTerm, sep = " ") 
+        separate(term, c("FirstTerms","MidTerm","LastTerm"),sep = " ") %>% 
+        unite("FirstTerms",FirstTerms,MidTerm, sep = " ") 
 TriGramTable <- data.table(TriGramDF1)
 
 
@@ -369,7 +494,7 @@ suggest1Gram[1:20,]
 colnames(BiGramTable)[1:2] <- c("word1","word2")
 
 TriGramTable <- TriGramTable %>% 
-  separate(FirstTerms, c("word1","word2"),sep = " ")
+        separate(FirstTerms, c("word1","word2"),sep = " ")
 colnames(TriGramTable)[3] <- "word3"
 
 source("PredictionFunctions.R")
