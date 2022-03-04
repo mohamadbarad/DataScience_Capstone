@@ -106,48 +106,42 @@ After cleaning up the environ ment and the dataset samples is stored, the data i
 # Reading data
 datalist <- readRDS("datalist.rds")
 
-dtmToDf <- function(DocTermMatrix){
-  freq <- colSums(DocTermMatrix)
-  terms <- data.frame(term = names(freq), frequency = freq, stringsAsFactors = FALSE)
-  terms <- arrange(terms, desc(frequency))
-  rownames(terms) <- 1:length(freq)
-  terms <- terms[!(is.na(terms$term) | terms$term==""), ]
-  return(terms)
-}
+source("02Functions/dtmToDf.R")
 
 # Clean and Tokenize into sentences
 system.time(TokSent <- lapply(datalist,function(x){
-  tmp <- quanteda::corpus(x)
-  corpus_reshape(tmp,to = "sentences")
+        tmp <- quanteda::corpus(x)
+        corpus_reshape(tmp,to = "sentences")
 })) 
 
+TokSent <- readRDS("TokSent.rds")
 system.time(unigram <- lapply(TokSent, function(x){
-  t<- tokens(x,
-             what = "word",
-             remove_punct = TRUE,
-             remove_symbols = TRUE,
-             remove_numbers = TRUE,
-             remove_separators = TRUE,
-             split_hyphens = TRUE,
-             padding = TRUE,
-             verbose = TRUE)
-  tokens_select(t,pattern=stopwords("en"), selection = "remove")
+        t<- tokens(x,
+                   what = "word",
+                   remove_punct = TRUE,
+                   remove_symbols = TRUE,
+                   remove_numbers = TRUE,
+                   remove_separators = TRUE,
+                   split_hyphens = TRUE,
+                   padding = TRUE,
+                   verbose = TRUE)
+        tokens_select(t,pattern=stopwords("en"), selection = "remove")
 }))
 rm(TokSent)
 
 system.time(bigram <- lapply(unigram, function(x){
-  tokens_ngrams(x,n = 2) # Bigram
+        tokens_ngrams(x,n = 2) # Bigram
 }))
 
 system.time(trigram <- lapply(unigram, function(x){
-  tokens_ngrams(x,n = 3) # Trigram
+        tokens_ngrams(x,n = 3) # Trigram
 }))
 system.time(tetragram <- lapply(unigram, function(x){
-  tokens_ngrams(x,n = 4) # Tetragram
+        tokens_ngrams(x,n = 4) # Tetragram
 }))
 
 system.time(pentagram <- lapply(unigram, function(x){
-  tokens_ngrams(x,n = 5) # pentagram
+        tokens_ngrams(x,n = 5) # pentagram
 }))
 
 # system.time(hexagram <- lapply(unigram, function(x){
@@ -159,83 +153,95 @@ system.time(pentagram <- lapply(unigram, function(x){
 ```{r Document Feature and Visualisation}
 
 ### UNIGRAM ### START 
-unigram <- readRDS("unigram.rds")
+unigram <- readRDS("01OutComesObj/Without Stopwords/unigram.rds")
+source("02Functions/dtmToDf.R")
+UniDocFeat <- list()
 system.time(
-  for (i in 1:3) {
-    UniDocFeat <- dfm(unigram[[i]])     
-})
-UniDataFrame <- dtmToDf(UniDocFeat)
+        for (i in 1:3) {
+                UniDocFeat[[i]] <- dfm(unigram[[i]]) # Sampling of data can happen here 
+        })
+UniDataFrame.blog <- dtmToDf(UniDocFeat[[1]])
+UniDataFrame.news <- dtmToDf(UniDocFeat[[2]])
+UniDataFrame.twit <- dtmToDf(UniDocFeat[[3]])
+UniDataFrame <- rbind(rbind(UniDataFrame.blog,UniDataFrame.news),UniDataFrame.twit)
+
 # Word cloud
-wordcloud(word = UniDataFrame$term, freq = UniDataFrame$frequency, min.freq = 1,max.words = 50, 
-          random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+wordcloud(word = UniDataFrame$term, freq = UniDataFrame$frequency, min.freq = 1,max.words = 50,random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
 # Bar plot:
 p1 <- ggplot( UniDataFrame[1:20,]) + 
-  geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
-  theme_minimal() +
-  coord_flip() +
-  labs(title = "Top 20 unigrams",
-       subtitle = "using quanteda in R",
-       caption = "Data Source:")
+        geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 unigrams",
+             subtitle = "using quanteda in R",
+             caption = "Data Source:")
 p1
-# saveRDS(UniDocFeat,"UniDocFeat.rds")
-# saveRDS(UniDataFrame,"UniDataFrame.rds")
-# rm(list=ls())
-# gc()
+saveRDS(UniDocFeat,"01OutComesObj/Without Stopwords/UniDocFeat.rds")
+saveRDS(UniDataFrame,"01OutComesObj/Without Stopwords/UniDataFrame.rds")
+rm(list=ls())
+gc()
 ### UNIGRAM ### END
 
 
 ### BIGRAM ### START 
-bigram <- readRDS("bigram.rds")
+bigram <- readRDS("01OutComesObj/Without Stopwords//bigram.rds")
+source("02Functions/dtmToDf.R")
+BiDocFeat <- list()
 system.time(
-  for (i in 1:3) {
-    BiDocFeat <- dfm(bigram[[i]])     
-  }
-)
-
-BiDataFrame <- dtmToDf(BiDocFeat)
+        for (i in 1:3) {
+                BiDocFeat[[i]] <- dfm(bigram[[i]]) # Sampling of data can happen here 
+        })
+BiDataFrame.blog <- dtmToDf(BiDocFeat[[1]])
+BiDataFrame.news <- dtmToDf(BiDocFeat[[2]])
+BiDataFrame.twit <- dtmToDf(BiDocFeat[[3]])
+BiDataFrame <- rbind(rbind(BiDataFrame.blog,BiDataFrame.news),BiDataFrame.twit)
 
 # Word cloud
 wordcloud(word = BiDataFrame$term, freq = BiDataFrame$frequency, min.freq = 1,max.words = 50,random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
 
 # Bar plot:
 p1 <- ggplot( BiDataFrame[1:20,]) + 
-  geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
-  theme_minimal() +
-  coord_flip() +
-  labs(title = "Top 20 unigrams",
-       subtitle = "using quanteda in R",
-       caption = "Data Source:")
+        geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 unigrams",
+             subtitle = "using quanteda in R",
+             caption = "Data Source:")
 p1
-# saveRDS(BiDocFeat,"BiDocFeat.rds")
-# saveRDS(BiDataFrame,"BiDataFrame.rds")
-# rm(list=ls())
-# gc()
+saveRDS(BiDocFeat,"01OutComesObj/Without Stopwords/BiDocFeat.rds")
+saveRDS(BiDataFrame,"01OutComesObj/Without Stopwords/BiDataFrame.rds")
+rm(list=ls())
+gc()
 ### BIGRAM ### END
 
 
 ### TRIGRAM  ### START 
-trigram <- readRDS("trigram.rds")
+trigram <- readRDS("01OutComesObj/Without Stopwords//trigram.rds")
+source("02Functions/dtmToDf.R")
+TriDocFeat <- list()
 system.time(
-  for (i in 1:3) {
-    TriDocFeat <- dfm(trigram[[i]])     
-  }
-)
-TriDataFrame <- dtmToDf(TriDocFeat)
+        for (i in 1:3) {
+                TriDocFeat[[i]] <- dfm(trigram[[i]]) # Sampling of data can happen here 
+        })
+TriDataFrame.blog <- dtmToDf(TriDocFeat[[1]])
+TriDataFrame.news <- dtmToDf(TriDocFeat[[2]])
+TriDataFrame.twit <- dtmToDf(TriDocFeat[[3]])
+TriDataFrame <- rbind(rbind(TriDataFrame.blog,TriDataFrame.news),TriDataFrame.twit)
 
 # Word cloud
 wordcloud(word = TriDataFrame$term, freq = TriDataFrame$frequency, min.freq = 1,max.words = 50,random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
 
 # Bar plot:
 p1 <- ggplot( TriDataFrame[1:20,]) + 
-  geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
-  theme_minimal() +
-  coord_flip() +
-  labs(title = "Top 20 Trigrams",
-       subtitle = "using quanteda in R",
-       caption = "Data Source:")
+        geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 Trigrams",
+             subtitle = "using quanteda in R",
+             caption = "Data Source:")
 p1
-saveRDS(TriDocFeat,"TriDocFeat.rds")
-saveRDS(TriDataFrame,"TriDataFrame.rds")
+saveRDS(TriDocFeat,"01OutComesObj/Without Stopwords/TriDocFeat.rds")
+saveRDS(TriDataFrame,"01OutComesObj/Without Stopwords/TriDataFrame.rds")
 rm(list=ls())
 gc()
 ### TRIGRAM  ### END
@@ -243,9 +249,9 @@ gc()
 ### TETRAGRAM ### START 
 tetragram <- readRDS("tetragram.rds")
 system.time(
-  for (i in 1:3) {
-    TetraDocFeat <- dfm(tetragram[[i]])     
-  }
+        for (i in 1:3) {
+                TetraDocFeat <- dfm(tetragram[[i]])     
+        }
 )
 
 TetraDataFrame <- dtmToDf(TetraDocFeat)
@@ -256,12 +262,12 @@ wordcloud(word = TetraDataFrame$term, freq = TetraDataFrame$frequency, min.freq 
 
 # Bar plot:
 p1 <- ggplot( TetraDataFrame[1:20,]) + 
-  geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
-  theme_minimal() +
-  coord_flip() +
-  labs(title = "Top 20 Tatragrams",
-       subtitle = "using quanteda in R",
-       caption = "Data Source:")
+        geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 Tatragrams",
+             subtitle = "using quanteda in R",
+             caption = "Data Source:")
 p1
 saveRDS(TetraDocFeat,"TetraDocFeat.rds")
 saveRDS(TetraDataFrame,"TetraDataFrame.rds")
@@ -272,21 +278,21 @@ gc()
 ### PENTAGRAM ### START 
 pentagram <- readRDS("pentagram.rds")
 system.time(
-  for (i in 1:3) {
-    PentaDocFeat <- dfm(Pentagram[[i]])     
-})
+        for (i in 1:3) {
+                PentaDocFeat <- dfm(Pentagram[[i]])     
+        })
 PentaDataFrame <- dtmToDf(PentaDocFeat)
 # Word cloud
 wordcloud(word = PentaDataFrame$term, freq = PentaDataFrame$frequency, min.freq = 1,max.words = 50, 
           random.order = FALSE, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
 # Bar plot:
 p1 <- ggplot( PentaDataFrame[1:20,]) + 
-  geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
-  theme_minimal() +
-  coord_flip() +
-  labs(title = "Top 20 unigrams",
-       subtitle = "using quanteda in R",
-       caption = "Data Source:")
+        geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 unigrams",
+             subtitle = "using quanteda in R",
+             caption = "Data Source:")
 p1
 saveRDS(PentaDocFeat,"PentaDocFeat.rds")
 saveRDS(PentaDataFrame,"PentaDataFrame.rds")
@@ -300,29 +306,37 @@ gc()
 # Predictive model development 
 
 ```{r Conversion to DataTables}
-OneGramDF <- readRDS("UniDataFrame.rds")
-BiGramDF <- readRDS("BiDataFrame.rds")
-TriGramDF <- readRDS("TriDataFrame.rds")
+setwd("C:/Users/Moham/OneDrive/01DataScience/10CapstoneProject/DataScience_Capstone")
 
-colnames(OneGramDF)[1] <- "LastTerm"
-UniGramTable <- data.table(OneGramDF)
+OneGramDF <- readRDS("01OutComesObj/Without Stopwords/UniDataFrame.rds")
+BiGramDF <- readRDS("01OutComesObj/Without Stopwords/BiDataFrame.rds")
+TriGramDF <- readRDS("01OutComesObj/Without Stopwords/TriDataFrame.rds")
 
-BiGramDF1 <- BiGramDF %>%
-  separate(term, c("FirstTerms","LastTerm"),sep = "_") 
-BiGramTable <- data.table(BiGramDF1)
+system.time({
+        colnames(OneGramDF)[1] <- "LastTerm"
+        UniGramTable <- data.table(OneGramDF)
+}) # Unigram 
 
-TriGramDF1 <- TriGramDF %>% 
-  separate(term, c("FirstTerms","MidTerm","LastTerm"),sep = "_") %>% 
-  unite("FirstTerms",FirstTerms,MidTerm, sep = "_") 
-TriGramTable <- data.table(TriGramDF1)
 
+system.time({
+        BiGramTable <- data.table(BiGramDF)
+        BiGramTable[, c("FirstTerms", "LastTerm") := transpose(stri_split_regex(term, '_', n=2))]
+}) # Bigram
+
+
+system.time({
+# TriGramTable <- data.table(TriGramDF)
+TriGramTable[, c("FirstTerms","Midterm", "LastTerm") := transpose(stri_split_regex(term,"_", n = 3))]
+TriGramTable[,FirstTerms:=paste0(FirstTerms,"_",Midterm)]
+TriGramTable[,Midterm:=NULL]
+})
 
 ```
 
 ```{r N-grams with discounts}
 # Source: https://github.com/ThachNgocTran/KatzBackOffModelImplementationInR/blob/master/cal
-source("LeftOverProb.R")
-source("GramTableExtended.R")
+source("02Functions/LeftOverProb.R")
+source("02Functions/GramTableExtended.R")
 UniGramTable <- GramTableExtended(UniGramTable)
 
 BiGramTable <- GramTableExtended(BiGramTable)
@@ -332,44 +346,51 @@ TriGramTable <- GramTableExtended(TriGramTable)
 TriGramTable <- TriGramTable[!(is.na(TriGramTable$LastTerm) | TriGramTable$LastTerm==""),]
 TriGramTable_leftOverProb = TriGramTable[, .(leftoverprob=LeftOverProb(LastTerm, frequency, discount)), by=FirstTerms]
 
+
 ```
 
 ```{r Testing}
 library(stringr)
 
-source("SeparateTerms.R")
-source("getLastTerms.R")
-source("getTriGramProb.R")
+source("02Functions/SeparateTerms.R")
+source("02Functions/getLastTerms.R")
+source("02Functions/getTriGramProb.R")
 
-p1 <- ggplot( TriGramDF[1:20,]) + 
-  geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
-  theme_minimal() +
-  coord_flip() +
-  labs(title = "Top 20 unigrams",
-       subtitle = "using Tidytext in R",
-       caption = "Data Source:")
+TriGramTable <- readRDS("01OutComesObj/Without Stopwords/TriGramTable.rds")
+TriGramTable_leftOverProb <- readRDS("01OutComesObj/Without Stopwords/TriGramTable_leftOverProb.rds")
+BiGramTable <- readRDS("01OutComesObj/Without Stopwords/BiGramTable.rds")
+BiGramTable_leftOverProb <- readRDS("01OutComesObj/Without Stopwords/BiGramTable_leftOverProb.rds")
+UniGramTable <- readRDS("01OutComesObj/Without Stopwords/UniGramTable.rds")
+
+p1 <- ggplot(TriGramDF[1:20,]) + 
+        geom_bar(aes(x= reorder(term, frequency),y=frequency), stat = "identity", fill = "#de5833") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Top 20 unigrams",
+             subtitle = "using Tidytext in R",
+             caption = "Data Source:")
 p1
 
-getTriGramProb("see arctic monkeys")
+getTriGramProb("help let us do")
 
-suggest3Gram <- TriGramTable_leftOverProb[which(TriGramTable_leftOverProb$leftoverprob>=probFinal),]
-suggest3Gram[1:20,]
-
-suggest3Gram <- TriGramTable[which(TriGramTable$prob>=probFinal),]
-suggest3Gram[1:20,"LastTerm"]
-
-suggest2Gram <- BiGramTable_leftOverProb[which(BiGramTable_leftOverProb$leftoverprob>=probFinal),]
-suggest2Gram[1:20,]
-
-suggest1Gram <- UniGramTable[which(UniGramTable$discount>=probFinal),]
-suggest1Gram[1:20,]
+# suggest3Gram <- TriGramTable_leftOverProb[which(TriGramTable_leftOverProb$leftoverprob>=probFinal),]
+# suggest3Gram[1:20,]
+# 
+# suggest3Gram <- TriGramTable[which(TriGramTable$prob>=probFinal),]
+# suggest3Gram[1:20,"LastTerm"]
+# 
+# suggest2Gram <- BiGramTable_leftOverProb[which(BiGramTable_leftOverProb$leftoverprob>=probFinal),]
+# suggest2Gram[1:20,]
+# 
+# suggest1Gram <- UniGramTable[which(UniGramTable$discount>=probFinal),]
+# suggest1Gram[1:20,]
 ```
 
 ```{r Next word}
 colnames(BiGramTable)[1:2] <- c("word1","word2")
 
 TriGramTable <- TriGramTable %>% 
-  separate(FirstTerms, c("word1","word2"),sep = " ")
+        separate(FirstTerms, c("word1","word2"),sep = " ")
 colnames(TriGramTable)[3] <- "word3"
 
 source("PredictionFunctions.R")
