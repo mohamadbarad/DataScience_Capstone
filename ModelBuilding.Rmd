@@ -368,15 +368,20 @@ source("02Functions/SeparateTerms.R")
 source("02Functions/getLastTerms.R")
 source("02Functions/getTriGramProb.R")
 # source("02Functions/postClean.R")
-QuadGramTable <- readRDS("01OutComesObj/Without Stopwords/QuadGramTable.rds")
-TriGramTable <- readRDS("01OutComesObj/Without Stopwords/TriGramTable.rds")
-# TriGramTable_leftOverProb <- readRDS("01OutComesObj/Without Stopwords/TriGramTable_leftOverProb.rds")
-BiGramTable <- readRDS("01OutComesObj/Without Stopwords/BiGramTable.rds")
-# BiGramTable_leftOverProb <- readRDS("01OutComesObj/Without Stopwords/BiGramTable_leftOverProb.rds")
-UniGramTable <- readRDS("01OutComesObj/Without Stopwords/UniGramTable.rds")
+QuadGramTable_ex <- readRDS("01OutComesObj/Without Stopwords/QuadGramTable_ex.rds")
+QuadGramTable_leftOverProb_ex <- readRDS("01OutComesObj/Without Stopwords/QuadGramTable_leftOverProb_ex.rds")
 
-BiGramTable[,term:=NULL]
-TriGramTable[,term:=NULL]
+TriGramTable_ex <- readRDS("01OutComesObj/Without Stopwords/TriGramTable_ex.rds")
+TriGramTable_leftOverProb_ex <- readRDS("01OutComesObj/Without Stopwords/TriGramTable_leftOverProb_ex.rds")
+
+BiGramTable_ex <- readRDS("01OutComesObj/Without Stopwords/BiGramTable_ex.rds")
+BiGramTable_leftOverProb_ex <- readRDS("01OutComesObj/Without Stopwords/BiGramTable_leftOverProb_ex.rds")
+
+UniGramTable_ex <- readRDS("01OutComesObj/Without Stopwords/UniGramTable_ex.rds")
+
+BiGramTable_ex[,term:=NULL]
+TriGramTable_ex[,term:=NULL]
+QuadGramTable_ex[,term:=NULL]
 
 TriGramTable_test <- TriGramTable[, c("FirstTerms", "MidTerm") := tstrsplit(FirstTerms, "_", fixed=TRUE)]
 # setkeyv(TriGramTable,c("FirstTerms","LastTerm"))
@@ -394,14 +399,6 @@ TriGramTable_test <- TriGramTable[, c("FirstTerms", "MidTerm") := tstrsplit(Firs
 #        subtitle = "using Tidytext in R",
 #        caption = "Data Source:")
 # p1
-
-average_frequency("hadn't time take picture")
-
-pred <- getTriGramProb("arctic monkeys this month")
-
-
-quiz = TriGramTable[grepl(pattern = paste0(c("Adam"),collapse = "|"),
-                          x = FirstTerms,useBytes = TRUE),] 
 
 ```
 
